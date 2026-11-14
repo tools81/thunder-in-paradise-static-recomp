@@ -1,0 +1,28 @@
+{
+  "title": "Thunder in Paradise",
+  "exe_name": "thunder",
+  "modules": [
+    {
+      "file": "auto",
+      "base": "0x0F0000",
+      "extra_entries": [],
+      "a5_table": "auto"
+    },
+    {
+      "file": "cdi_Thunder",
+      "base": "0x100000",
+      "extra_entries": [
+        "0x1193fe"
+      ],
+      "a5_table": "auto"
+    }
+  ],
+  "cheats": {
+    "invincible": {
+      "module": "cdi_Thunder",
+      "a6_offset": -28482,
+      "value": 1,
+      "comment": "NoDamage: the game's own player-only damage switch (boat shields and island damage)"
+    }
+  }
+}
