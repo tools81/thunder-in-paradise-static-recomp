@@ -98,9 +98,20 @@ was confirmed by actual use in that game.
   * Close 3;
   * Info 0 is GetStat and returns a0 = descriptor.
 * **SM_Out on a busy processor queues the new soundmap** to start when the
-  current sector finishes. Games double-buffer music this way and pace
-  themselves on the completion signal (ASY_Sig), so completions must be
-  sample-exact.
+  current sector (18 sound groups) finishes. A newer SM_Out replaces a
+  pending one. Games double-buffer music this way and pace themselves on the
+  completion signal (ASY_Sig), so completions must be sample-exact. Rapid
+  sound effects cut each other at sector boundaries; they don't wait for the
+  whole soundmap.
+* **The soundmap descriptor defines what plays**, not the buffer SM_Creat
+  allocated. Thunder in Paradise creates a single soundmap. For every effect,
+  `PlaySoundMap` (0x11461a) rewrites the descriptor and then calls SM_Out:
+  * +10: data address;
+  * +14: size;
+  * +26: sound group count;
+  * +30: coding.
+
+  Decoding the creation buffer played one stale clip for every blast and hit.
 * SS_SC = 0x3D, SC_Atten d3: bytes 2 and 0 are the direct paths (L→L, R→R),
   bytes 3 and 1 the cross paths. 0xFF is off.
 * ADPCM coding byte:

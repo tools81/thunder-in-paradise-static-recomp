@@ -79,6 +79,7 @@ int main(int argc, char **argv) {
         if (!strcmp(argv[i], "--headless")) g_headless = 1;
         else if (!strcmp(argv[i], "--no-update-check")) no_update = 1;
         else if (!strcmp(argv[i], "--version")) { printf(GAME_TITLE " %s\n", APP_VERSION); return 0; }
+        else if (!strcmp(argv[i], "--load-old-quicksaves")) { extern int g_snap_any_build; g_snap_any_build = 1; }
         else if (!strcmp(argv[i], "--portable")) { }   /* always portable: accepted for shortcuts that pass it */
         else if (!strcmp(argv[i], "--trace")) log_level = 2;
         else if (!strcmp(argv[i], "--trace3")) log_level = 3;

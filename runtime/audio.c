@@ -168,18 +168,34 @@ static int atten[4] = {0, 0xFF, 0, 0xFF};   /* LL, LR, RR, RL: stereo at full vo
 
 static int64_t now_sample(void) { return m68k.cyc * OUT_RATE / CPU_IPS; }
 
+/* What a soundmap plays is defined by its descriptor in emulated memory, not
+   by the buffer SM_Creat allocated: the program may point the descriptor at
+   other sound data before SM_Out.  Thunder in Paradise's PlaySoundMap does
+   this for every sound effect (one soundmap, descriptor rewritten with the
+   effect's data address, size, sound group count and coding). */
+static void sm_params(const SoundMap *s, uint32_t *data, int *groups, int *coding) {
+    uint32_t d = RL(s->desc + 10);
+    int g = (int)RW(s->desc + 26);
+    int c = (int)RB(s->desc + 30);
+    if (!d || !g || d + (uint32_t)g * 128 > MEM_SIZE) { d = s->data; g = s->groups; c = s->coding; }
+    *data = d; *groups = g; *coding = c;
+}
+
 static void sm_decode(SmPlay *p, int id, int continuous) {
     SoundMap *s = &sms[id];
+    uint32_t data;
+    int groups, coding;
+    sm_params(s, &data, &groups, &coding);
     if (!continuous) memset(&sm_state, 0, sizeof sm_state);
-    int16_t *L = (int16_t *)malloc(sizeof(int16_t) * 224 * s->groups + 16);
-    int16_t *R = (int16_t *)malloc(sizeof(int16_t) * 224 * s->groups + 16);
+    int16_t *L = (int16_t *)malloc(sizeof(int16_t) * 224 * groups + 16);
+    int16_t *R = (int16_t *)malloc(sizeof(int16_t) * 224 * groups + 16);
     int n = 0;
-    for (int g = 0; g < s->groups; g++) {
+    for (int g = 0; g < groups; g++) {
         uint8_t grp[128];
-        for (int k = 0; k < 128; k++) grp[k] = RB(s->data + g * 128 + k);
-        n += decode_group(grp, s->coding, &sm_state, L + n, R + n);
+        for (int k = 0; k < 128; k++) grp[k] = RB(data + g * 128 + k);
+        n += decode_group(grp, coding, &sm_state, L + n, R + n);
     }
-    int rate = coding_rate(s->coding);
+    int rate = coding_rate(coding);
     int outn = (int)((double)n * OUT_RATE / rate);
     st_free(p->pcm);
     p->pcm = (int16_t *)st_malloc(sizeof(int16_t) * 2 * (outn + 1));
@@ -195,8 +211,9 @@ static void sm_decode(SmPlay *p, int id, int continuous) {
     p->len = outn;
     if (log_level >= 2) {
         uint32_t ck = 0;
-        for (int g = 0; g < s->groups * 128; g++) ck = ck * 31 + RB(s->data + g);
-        TRACE("sm_decode id %d cyc %lld rendered %lld ck %08x cont %d", id, (long long)m68k.cyc, (long long)rendered, ck, continuous);
+        for (int g = 0; g < groups * 128; g++) ck = ck * 31 + RB(data + g);
+        TRACE("sm_decode id %d data %06x groups %d coding %02x cyc %lld rendered %lld ck %08x cont %d", id, data,
+              groups, coding, (long long)m68k.cyc, (long long)rendered, ck, continuous);
     }
 }
 
@@ -277,13 +294,41 @@ void audio_event(void) {
     }
 }
 
+static int group_frames(int coding) {
+    int units = ((coding >> 4) & 3) == 1 ? 4 : 8;
+    return units * 28 / ((coding & 3) == 1 ? 2 : 1);
+}
+
+/* End (output samples) of the sound sector (18 sound groups) of the playing
+   soundmap that is being output now. */
+static int64_t cur_sector_end(void) {
+    int coding = sms[cur.id].coding;      /* the playing sound's coding (its descriptor may be rewritten already) */
+    int rate = coding_rate(coding);
+    int64_t sector = 18LL * group_frames(coding);                       /* source frames */
+    int64_t el = now_sample() - cur.start;
+    if (el < 0) el = 0;
+    int64_t src = el * rate / OUT_RATE;                                 /* source frames played */
+    int64_t end_src = (src / sector + 1) * sector;
+    return cur.start + (end_src * OUT_RATE + rate - 1) / rate;
+}
+
 static void sm_out(int id, uint32_t asy) {
     if (asy) WW(asy, 0);
     if (cur.active) {
-        /* the current sector finishes first; replace any pending soundmap */
+        /* The audio processor finishes the sound sector it is outputting,
+           then starts the new soundmap; a newer SM_Out replaces a pending one.
+           (Rapid sound effects cut each other at sector boundaries; music
+           made of one-sector soundmaps plays back to back.) */
         if (nxt.active) asy_done(nxt.asy, nxt.pid);
         nxt.active = 1; nxt.id = id; nxt.asy = asy; nxt.pid = os9_cur_pid();
-        TRACE("SM_Out %d queued", id);
+        int64_t end = cur_sector_end();
+        if (end < cur.start + cur.len) {
+            render_until(now_sample());
+            cur.len = (int)(end - cur.start);
+        }
+        int64_t ev = audio_next_event();
+        if (ev < m68k.cyc_limit) m68k.cyc_limit = ev;
+        TRACE("SM_Out %d queued (switch at %lld)", id, (long long)(cur.start + cur.len));
         return;
     }
     render_until(now_sample());

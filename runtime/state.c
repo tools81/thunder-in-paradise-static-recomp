@@ -231,14 +231,20 @@ int snap_save_file(const Snapshot *s, const char *path) {
     return ok ? 0 : 1;
 }
 
+/* --load-old-quicksaves: accept files from another build.  Only safe when
+   that build had the same state layout (no runtime struct or global changed),
+   e.g. after a fix that touched code only. */
+int g_snap_any_build;
+
 int snap_load_file(Snapshot *s, const char *path) {
     FILE *f = fopen(path, "rb");
     if (!f) return 1;
     FileHeader h, want;
     memset(&want, 0, sizeof want);
     build_id(&want.build, &want.image_size);
-    if (fread(&h, sizeof h, 1, f) != 1 || memcmp(h.magic, "CDISNAP1", 8) || h.build != want.build ||
-        h.image_size != want.image_size || h.arena_addr != (uint64_t)(uintptr_t)arena || !arena_fixed) {
+    if (fread(&h, sizeof h, 1, f) != 1 || memcmp(h.magic, "CDISNAP1", 8) ||
+        !((h.build == want.build && h.image_size == want.image_size) || g_snap_any_build) ||
+        h.arena_addr != (uint64_t)(uintptr_t)arena || !arena_fixed) {
         fclose(f);
         return 2;
     }

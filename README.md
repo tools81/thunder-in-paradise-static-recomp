@@ -282,6 +282,10 @@ and in `docs/CDI_NOTES.md`.
 
 ## Debugging
 
+* `--load-old-quicksaves` accepts quicksave files from another build. It is
+  only safe when the runtime's state layout didn't change, meaning no
+  runtime struct or global was added or resized. To convert a slot, load it
+  with the flag and press F2 to save it again in the current build's format.
 * `--trace` / `--trace3` log syscalls with callers, signals, disc activity and
   MPEG driver activity. Unimplemented calls are always logged to
   `saves/recomp.log`.
