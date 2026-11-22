@@ -11,7 +11,7 @@
 ; written to saves\disc_path.txt, which the game reads at start-up.
 
 #ifndef AppVersion
-  #define AppVersion "1.0.0"
+  #define AppVersion "1.0.1"
 #endif
 #ifndef DistDir
   #define DistDir "..\dist\stage"
